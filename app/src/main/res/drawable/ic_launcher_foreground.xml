@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- message bubble -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,20 H66 C74.8,20 82,27.2 82,36 V50 C82,58.8 74.8,66 66,66 H50 L34,80 V64 C27.5,61.5 22,56.5 22,50 V36 C22,27.2 29.2,20 38,20 Z" />
+    <!-- the "f" -->
+    <path
+        android:fillColor="#FF1877F2"
+        android:pathData="M47,60 V47 H42 V41 H47 V38 C47,32 51,28 57,28 H63 V34 H59 C56.5,34 54,35 54,38 V41 H62 L61,47 H54 V60 Z" />
+    <!-- delete badge: white ring + red disc -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M76,78 m-19,0 a19,19 0 1,0 38,0 a19,19 0 1,0 -38,0" />
+    <path
+        android:fillColor="#FFE53935"
+        android:pathData="M76,78 m-16,0 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0" />
+    <!-- trash can -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M69,71 H83 V73.2 H69 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M74,68.6 H78 V71 H74 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M70.2,74.6 H81.8 L80.8,87 H71.2 Z" />
+    <path
+        android:fillColor="#FFE53935"
+        android:pathData="M73,76.6 H74.3 V85 H73 Z M75.4,76.6 H76.6 V85 H75.4 Z M77.7,76.6 H79 V85 H77.7 Z" />
+</vector>

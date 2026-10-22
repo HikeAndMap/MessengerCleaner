@@ -1,0 +1,15 @@
+# Gradle / Android build output
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+.idea/
+*.iml
+
+# APKs are published as GitHub release assets, not committed
+release/
+*.apk
+
+# Stray local copy from an earlier sync
+/MessengerCleaner/

@@ -2,7 +2,7 @@
 
 A small Android app that **unsends your own Messenger messages for everyone, in bulk**.
 
-Facebook Messenger only lets you unsend one message at a time (tap the message, "…", Unsend, "Unsend for everyone", Remove). On a chat with hundreds or thousands of messages that is a daunting job. Messenger Cleaner does those taps for you, newest to oldest, all the way back to the first message.
+Facebook Messenger only lets you unsend one message at a time (tap the message, "…", Unsend, "Unsend for everyone", Remove). On a chat with hundreds or thousands of messages that is a daunting job. Messenger Cleaner does those taps for you, from the very first message to the latest.
 
 > Not affiliated with, endorsed by, or connected to Meta Platforms, Inc. "Facebook" and "Messenger" are trademarks of their respective owners.
 
@@ -10,11 +10,11 @@ Facebook Messenger only lets you unsend one message at a time (tap the message, 
 
 1. Shows `facebook.com/messages` in an in-app browser. You log in yourself.
 2. You open a conversation and tap **Unsend all**.
-3. The app scrolls to the newest message and walks up the chat one screen at a time. For each of **your own** messages it:
+3. The app first scrolls to the top to load the whole history, then walks **from the oldest message down to the newest**, one screen at a time. For each of **your own** messages it:
    - reveals the message's action toolbar,
    - taps **More actions**, then **Unsend**,
    - picks **Unsend for everyone** and confirms with **Remove**.
-4. It keeps going until the top of the conversation, then re-checks the whole chat until a full pass finds nothing left to unsend, so one run is meant to be enough.
+4. It keeps going until the bottom of the conversation, then re-checks the whole chat until a full pass finds nothing left to unsend, so one run is meant to be enough.
 
 Messages from other people are never touched. The **Stop** button halts it at any time.
 
@@ -38,7 +38,7 @@ The status line shows progress, e.g. `Unsent 120, skipped 2`, and says
 Tips:
 
 - Don't switch to another app or tap a message notification while it runs; the page can pause or lose its place.
-- Do one chat at a time. It pauses 1-2 seconds between messages to look like a person and to avoid rate limits.
+- Do one chat at a time. The **Speed** button cycles Careful, Normal and Fast (default). It only changes the fixed pauses between steps; faster means a higher chance Facebook slows you down, so drop to Normal or Careful if that happens.
 - **Unsending is permanent.** There is no undo. Try it on a throwaway chat first.
 
 ## How it works
@@ -48,7 +48,7 @@ The app is a single `WebView` activity plus one injected script, [`unsend.js`](a
 - Messages are found through Facebook's `role="article"` elements. Your own messages are laid out right-to-left (`row-reverse`), received ones left-to-right.
 - Hovering a message makes its toolbar appear without opening photos or location cards. The script then taps through the menus using **real Android touch events** (`MotionEvent`), because Facebook ignores script-generated clicks on several of these buttons.
 - Menus and dialogs are matched by their **visible** text, never by `aria-label`, because the confirmation dialog contains a hidden, disabled duplicate "Remove" button.
-- It scrolls up in screen-sized steps and waits for the layout to stop moving before each message, since lazy-loading photos shift the page while it works.
+- It loads the history by jumping to the top until nothing older arrives, then scrolls down in screen-sized steps and waits for the layout to stop moving before each message, since lazy-loading photos shift the page while it works.
 - **Escape is only pressed when a menu or dialog is open.** In Messenger, Escape with nothing open closes the whole conversation.
 
 ## Build

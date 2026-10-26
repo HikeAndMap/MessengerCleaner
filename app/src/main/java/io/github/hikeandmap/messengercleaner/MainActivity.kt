@@ -17,12 +17,16 @@ import androidx.activity.ComponentActivity
 
 /**
  * Loads facebook.com/messages in a WebView. You log in and open a chat by hand,
- * then tap "Unsend all": assets/unsend.js is injected and removes your own messages
- * one by one ("Remove" -> "Unsend for everyone"), scrolling up for older ones.
+ * then tap "Unsend all": assets/unsend.js is injected. It loads the whole history, then walks
+ * from the oldest message to the newest and unsends your own messages for everyone.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
     private lateinit var status: TextView
+
+    /** Speed presets cycled by the button: label to pause factor (higher = faster, riskier). */
+    private val speeds = listOf("Careful" to 1.0, "Normal" to 1.5, "Fast" to 2.0)
+    private var speedIndex = 2
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,7 +57,18 @@ class MainActivity : ComponentActivity() {
         }
         val start = Button(this).apply {
             text = "Unsend all"
-            setOnClickListener { web.evaluateJavascript(loadScript() + "\nwindow.__mc.start();", null) }
+            setOnClickListener {
+                web.evaluateJavascript(
+                    loadScript() + "\nwindow.__mc.setSpeed(${speeds[speedIndex].second});\nwindow.__mc.start();", null,
+                )
+            }
+        }
+        val speed = Button(this).apply {
+            text = "Speed: ${speeds[speedIndex].first}"
+            setOnClickListener {
+                speedIndex = (speedIndex + 1) % speeds.size
+                text = "Speed: ${speeds[speedIndex].first}"
+            }
         }
         val stop = Button(this).apply {
             text = "Stop"
@@ -61,8 +76,9 @@ class MainActivity : ComponentActivity() {
         }
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(start, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(stop, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(start, LinearLayout.LayoutParams(0, -2, 1.2f))
+            addView(speed, LinearLayout.LayoutParams(0, -2, 1.2f))
+            addView(stop, LinearLayout.LayoutParams(0, -2, 0.8f))
         }
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

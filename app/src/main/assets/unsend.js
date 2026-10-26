@@ -1,4 +1,5 @@
-// Unsends your own messages in the open chat, newest first, scrolling up until the start.
+// Unsends your own messages in the open chat: first loads the whole history, then walks from the
+// OLDEST message down to the newest.
 // Flow per message: hover it -> toolbar "More actions" -> "Unsend" -> "Unsend for everyone" -> "Remove".
 // Works for text, photos, stickers, location cards etc.: every message is a [role=article]; own ones are laid out row-reverse.
 // Taps are real Android touches (Android.tap). Texts are matched below; add your language there.
@@ -14,7 +15,9 @@
     ignore:   [/unsent a message/i, /removed a message/i, /message was removed/i, /deleted a message/i, /^message removed$/i],
   };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const state = { running: false, done: 0, skipped: 0, why: '', trace: [], fails: [] };
+  const state = { running: false, done: 0, skipped: 0, why: '', trace: [], fails: [], speed: 2 };
+  // Fixed pauses shrink with the speed factor (1 = careful, 1.5 = normal, 2 = fast). Real waits for Facebook don't.
+  const pace = (ms) => sleep(ms / state.speed);
   const note = (m) => { state.trace.push(m); if (state.trace.length > 40) state.trace.shift(); };
   const say = (m) => { try { Android.report(m); } catch (e) { console.log(m); } };
   const progress = (extra) => say('Unsent ' + state.done + ', skipped ' + state.skipped +
@@ -30,7 +33,7 @@
 
   async function waitFor(fn, ms = 2000) {
     const end = Date.now() + ms;
-    while (Date.now() < end) { const v = fn(); if (v) return v; await sleep(100); }
+    while (Date.now() < end) { const v = fn(); if (v) return v; await sleep(40); }
     return null;
   }
 
@@ -74,7 +77,7 @@
         el.dispatchEvent(new (t.startsWith('pointer') ? PointerEvent : MouseEvent)(t,
           { bubbles: true, cancelable: true, view: window, clientX: p[0], clientY: p[1] }));
     }
-    await sleep(250);
+    await pace(120);
     return true;
   }
   // Escape closes the whole conversation when nothing is open, so only press it to dismiss a menu/dialog.
@@ -144,16 +147,19 @@
   const menuTexts = () => [...document.querySelectorAll('[role="menuitem"]')]
     .filter(visible).map(ownText).slice(0, 6).join('|');
 
-  // Lazy-loading photos shift the layout while we work: re-centre until the message holds still on screen.
+  // Lazy-loading photos shift the layout while we work: only scroll when the message isn't already
+  // comfortably on screen, and wait until it holds still before acting on it.
   async function bringIntoView(el, sc) {
     let lastTop = null;
     for (let i = 0; i < 10; i++) {
-      el.scrollIntoView({ block: 'center' });
-      await sleep(350);
       const r = el.getBoundingClientRect(), c = sc.getBoundingClientRect();
-      const onScreen = Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top) >= Math.min(r.height, 60);
-      if (onScreen && lastTop !== null && Math.abs(r.top - lastTop) < 2) return true;
+      const tall = r.height > c.height - 16;
+      const inside = tall ? Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top) >= 120
+                          : r.top >= c.top + 8 && r.bottom <= c.bottom - 8;
+      if (!inside) { el.scrollIntoView({ block: 'center' }); lastTop = null; await pace(350); continue; }
+      if (lastTop !== null && Math.abs(r.top - lastTop) < 2) return true;
       lastTop = r.top;
+      await pace(150);
     }
     return false;
   }
@@ -182,7 +188,10 @@
     const opt = await waitFor(() => find(dlg, 'label', L.everyone) ||
       (L.everyone.some((re) => re.test(ownText(dlg))) && !find(dlg, 'label', L.forYou) ? dlg : null), 1500);
     if (!opt) { state.why = 'no "for everyone" option'; escape(); await sleep(300); return false; }
-    if (opt !== dlg) { await tap(opt); await sleep(300); } // preselected, but make sure
+    if (opt !== dlg) {                          // radio variant: "for everyone" is normally preselected
+      const input = opt.control;                // the <input> this label belongs to
+      if (!(input && input.checked)) { await tap(opt); await pace(200); }
+    }
     const ok = find(dlg, '[role="button"]', L.confirm);
     if (!ok) { state.why = 'no Remove button'; escape(); return false; }
     if (!(await tap(ok))) { state.why = 'Remove not tappable'; escape(); return false; }
@@ -193,41 +202,56 @@
     return true;
   }
 
-  // One walk from the newest message to the start of the conversation; returns how many were unsent.
-  async function pass() {
-    let unsent = 0, stuck = 0;
+  const inChatNow = () => /\/messages\/(e2ee\/)?t\//.test(location.pathname);
+
+  // Load the whole history: keep jumping to the top until Facebook has nothing older to give.
+  async function climb() {
+    let stuck = 0, last = -1;
+    while (state.running && stuck < 3) {
+      if (!inChatNow()) { state.running = false; state.closed = true; return; }
+      const sc = scroller();
+      sc.scrollTop = 0;
+      await sleep(1500);                    // real wait: Facebook loads older messages in chunks
+      const h = scroller().scrollHeight;
+      stuck = h === last ? stuck + 1 : 0;
+      last = h;
+      say('Loading the whole history first... (' + Math.round(h / 100) / 10 + 'k px so far)');
+    }
+  }
+
+  // One walk from the OLDEST message down to the newest; returns how many were unsent.
+  async function walk() {
+    let unsent = 0;
     document.querySelectorAll('[data-mc-done]').forEach((e) => delete e.dataset.mcDone);
     let sc = scroller();
-    sc.scrollTop = sc.scrollHeight;
-    await sleep(1200);
+    sc.scrollTop = 0;
+    await pace(800);
     while (state.running) {
-      if (!/\/messages\/(e2ee\/)?t\//.test(location.pathname)) { state.running = false; state.closed = true; return unsent; }
+      if (!inChatNow()) { state.running = false; state.closed = true; return unsent; }
       sc = scroller();
-      const list = candidates(sc);
-      progress('[' + list.length + ' messages in view]');
-      for (const bubble of list.reverse()) {      // newest first
+      const list = candidates(sc);                // document order = top to bottom
+      progress('[' + list.length + ' messages on screen]');
+      for (const bubble of list) {
         if (!state.running) break;
         bubble.dataset.mcDone = '1';
         let ok = false;
         for (let attempt = 1; attempt <= 3 && !ok && state.running; attempt++) {
           ok = await tryUnsend(bubble, sc);
-          if (!ok) { escape(); await sleep(900); }   // retry transient failures
+          if (!ok) { escape(); await pace(900); }   // retry transient failures
         }
-        if (ok) { state.done++; unsent++; await sleep(900 + Math.random() * 700); }
+        if (ok) { state.done++; unsent++; await pace(900 + Math.random() * 700); }
         else { state.skipped++; state.fails.push(ownText(bubble).slice(0, 30) + ' :: ' + state.why); }
         progress();
       }
       if (!state.running) break;
-      if (sc.scrollTop > 5) {
-        sc.scrollTop = Math.max(0, sc.scrollTop - sc.clientHeight * 0.7);
-        await sleep(700);
+      const atBottom = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 5;
+      if (!atBottom) {
+        sc.scrollTop += sc.clientHeight * 0.7;    // overlap so nothing falls between two screens
+        await pace(600);
         continue;
       }
-      // At the top: wait for older messages to load; stop when nothing new arrives.
-      const h = sc.scrollHeight;
-      await sleep(2500);
-      stuck = (scroller().scrollHeight === h && scroller().scrollTop <= 5) ? stuck + 1 : 0;
-      if (stuck >= 3) break;
+      if (list.length === 0) break;               // bottom reached and nothing left to do
+      await pace(600);                            // at the bottom: re-scan once more
     }
     return unsent;
   }
@@ -235,21 +259,22 @@
   // Repeat full passes until one finds nothing left to unsend, so a single run clears the chat.
   async function loop() {
     state.running = true;
-    const inChat = () => /\/messages\/(e2ee\/)?t\//.test(location.pathname) && document.querySelector('[role="article"]');
-    if (!(await waitFor(inChat, 12000))) {
+    const ready = () => inChatNow() && document.querySelector('[role="article"]');
+    if (!(await waitFor(ready, 12000))) {
       state.running = false;
       say('No messages found. Open a chat (wait until it has loaded), then tap Unsend all.');
       return;
     }
+    await climb();
     for (let n = 1; n <= 5 && state.running; n++) {
-      const unsent = await pass();
+      const unsent = await walk();
       if (unsent === 0) break;
       progress('[pass ' + n + ' done, checking again]');
     }
     const finished = state.running;
     state.running = false;
     if (state.closed) { say('The chat closed unexpectedly - open it again and tap Unsend all. Unsent ' + state.done); return; }
-    say((finished ? 'Finished: reached the start, nothing left to unsend. ' : 'Stopped. ') +
+    say((finished ? 'Finished: oldest to newest, nothing left to unsend. ' : 'Stopped. ') +
       'Unsent ' + state.done + ', skipped ' + state.skipped);
   }
 
@@ -260,6 +285,7 @@
       return { sc: sc.tagName + ' ' + Math.round(b.left) + ',' + Math.round(b.top) + ',' + Math.round(b.right) + ',' + Math.round(b.bottom),
         cands: candidates(sc).map((e) => { const r = e.getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.right) + ' ' + e.tagName + ' ' + ownText(e).slice(0, 20); }) };
     },
+    setSpeed(x) { state.speed = Math.max(0.5, Math.min(3, Number(x) || 1)); },
     start() { if (!state.running) loop(); },
     stop() { state.running = false; say('Stopping...'); },
   };
